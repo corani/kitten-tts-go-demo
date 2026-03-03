@@ -5,9 +5,23 @@ Goruut phonemizer.
 
 ## Setup
 
-From the repository root:
+### Expected folder structure
 
-### 1) Get the KittenTTS model assets
+```text
+root/
+  go-demo/
+  goruut/
+  kitten-tts-mini-0.8/
+  onnxruntime-linux-x64-1.18.0/
+```
+
+### 1) Clone this repo
+
+```bash
+git clone https://github.com/corani/kitten-tts-go-demo go-demo
+```
+
+### 2) Get the KittenTTS model assets
 
 Clone the model repo from Hugging Face (example: mini model):
 
@@ -15,16 +29,14 @@ Clone the model repo from Hugging Face (example: mini model):
 git clone https://huggingface.co/KittenML/kitten-tts-mini-0.8
 ```
 
-### 2) Get ONNX Runtime
+### 3) Get ONNX Runtime
 
 ```bash
-mkdir -p onnxruntime-linux-x64-1.18.0
-cd onnxruntime-linux-x64-1.18.0
 curl -L -o onnxruntime-linux-x64-1.18.0.tgz https://github.com/microsoft/onnxruntime/releases/download/v1.18.0/onnxruntime-linux-x64-1.18.0.tgz
-tar -xzf onnxruntime-linux-x64-1.18.0.tgz --strip-components=1
+tar -xzf onnxruntime-linux-x64-1.18.0.tgz
 ```
 
-### 3) Get goruut (module dependency)
+### 4) Clone goruut
 
 The demo uses goruut as a module with a local replace. Clone it next to this repo:
 
@@ -32,6 +44,8 @@ The demo uses goruut as a module with a local replace. Clone it next to this rep
 cd ..
 git clone https://github.com/neurlang/goruut.git
 ```
+
+This is needed because the repo contains large zip files that `go get` refuses to fetch.
 
 ## Run
 

@@ -1,4 +1,4 @@
-module kitten-tts-go-demo
+module github.com/corani/kitten-tts-go-demo
 
 go 1.22.4
 
