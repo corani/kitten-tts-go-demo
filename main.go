@@ -28,7 +28,6 @@ type Args struct {
 	voice           string
 	output          string
 	speed           float64
-	cleanText       bool
 	goruutLang      string
 	goruutNormalize bool
 	onnxRuntimeLib  string
@@ -41,7 +40,6 @@ func parseArgs() Args {
 	flag.StringVar(&args.voice, "voice", "Bruno", "Voice name (e.g., Bella, Jasper, Luna, Bruno, Rosie, Hugo, Kiki, Leo)")
 	flag.StringVar(&args.output, "output", "output.wav", "Output WAV path")
 	flag.Float64Var(&args.speed, "speed", 1.0, "Speech speed factor")
-	flag.BoolVar(&args.cleanText, "clean-text", true, "Apply basic text cleanup before synthesis")
 	flag.StringVar(&args.goruutLang, "goruut-lang", "EnglishAmerican", "Goruut language name")
 	flag.BoolVar(&args.goruutNormalize, "goruut-normalize", true, "Apply minimal IPA normalization to goruut output")
 	flag.StringVar(&args.onnxRuntimeLib, "onnxruntime-lib", "onnxruntime-linux-x64-1.18.0/lib/libonnxruntime.so.1.18.0", "Path to libonnxruntime.so")
@@ -107,9 +105,6 @@ func main() {
 	defer session.Destroy()
 
 	text := args.text
-	if args.cleanText {
-		text = basicTextClean(text)
-	}
 
 	phonemizer := lib.NewPhonemizer(nil)
 	lang := normalizeGoruutLang(args.goruutLang)

@@ -34,13 +34,6 @@ func (tc *TextCleaner) Encode(text string) []int64 {
 	return out
 }
 
-func basicTextClean(text string) string {
-	text = strings.ReplaceAll(text, "\n", " ")
-	text = strings.TrimSpace(text)
-	text = regexp.MustCompile(`\s+`).ReplaceAllString(text, " ")
-	return text
-}
-
 func ensurePunctuation(text string) string {
 	text = strings.TrimSpace(text)
 	if text == "" {
