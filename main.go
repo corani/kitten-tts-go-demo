@@ -8,8 +8,10 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"unicode"
 
+	"github.com/neurlang/goruut/dicts"
+	"github.com/neurlang/goruut/lib"
+	"github.com/neurlang/goruut/models/requests"
 	ort "github.com/yalue/onnxruntime_go"
 )
 
@@ -21,15 +23,15 @@ type Config struct {
 }
 
 type Args struct {
-	modelDir       string
-	text           string
-	voice          string
-	output         string
-	speed          float64
-	cleanText      bool
-	espeakPath     string
-	ipaMode        string
-	onnxRuntimeLib string
+	modelDir        string
+	text            string
+	voice           string
+	output          string
+	speed           float64
+	cleanText       bool
+	goruutLang      string
+	goruutNormalize bool
+	onnxRuntimeLib  string
 }
 
 func parseArgs() Args {
@@ -40,8 +42,8 @@ func parseArgs() Args {
 	flag.StringVar(&args.output, "output", "output.wav", "Output WAV path")
 	flag.Float64Var(&args.speed, "speed", 1.0, "Speech speed factor")
 	flag.BoolVar(&args.cleanText, "clean-text", true, "Apply basic text cleanup before synthesis")
-	flag.StringVar(&args.espeakPath, "espeak", "", "Path to espeak-ng executable (defaults to espeak-ng in PATH)")
-	flag.StringVar(&args.ipaMode, "ipa-mode", "ipa", "espeak-ng IPA mode: ipa, ipa=1, ipa=2, ipa=3")
+	flag.StringVar(&args.goruutLang, "goruut-lang", "EnglishAmerican", "Goruut language name")
+	flag.BoolVar(&args.goruutNormalize, "goruut-normalize", true, "Apply minimal IPA normalization to goruut output")
 	flag.StringVar(&args.onnxRuntimeLib, "onnxruntime-lib", "onnxruntime-linux-x64-1.18.0/lib/libonnxruntime.so.1.18.0", "Path to libonnxruntime.so")
 	flag.Parse()
 	return args
@@ -109,11 +111,14 @@ func main() {
 		text = basicTextClean(text)
 	}
 
+	phonemizer := lib.NewPhonemizer(nil)
+	lang := normalizeGoruutLang(args.goruutLang)
+
 	cleaner := NewTextCleaner()
 	chunks := chunkText(text, 400)
 	var audio []float32
 	for _, chunk := range chunks {
-		chunkAudio, err := synthesizeChunk(session, inputNames, outputNames, cleaner, voiceArr, cfg, voiceID, chunk, args.speed, args.espeakPath, args.ipaMode)
+		chunkAudio, err := synthesizeChunk(session, inputNames, outputNames, cleaner, voiceArr, cfg, voiceID, chunk, args.speed, phonemizer, lang, args.goruutNormalize)
 		if err != nil {
 			fatal(err)
 		}
@@ -126,19 +131,15 @@ func main() {
 	fmt.Printf("Saved audio to %s\n", args.output)
 }
 
-func synthesizeChunk(session *ort.DynamicAdvancedSession, inputNames []string, outputNames []string, cleaner *TextCleaner, voiceArr VoiceArray, cfg Config, voiceID string, text string, speed float64, espeakPath string, ipaMode string) ([]float32, error) {
+func synthesizeChunk(session *ort.DynamicAdvancedSession, inputNames []string, outputNames []string, cleaner *TextCleaner, voiceArr VoiceArray, cfg Config, voiceID string, text string, speed float64, phonemizer *lib.Phonemizer, goruutLang string, goruutNormalize bool) ([]float32, error) {
 	if text == "" {
 		return nil, nil
 	}
 
-	phonemes, err := phonemize(text, espeakPath, ipaMode)
+	mergedTokens, err := buildPhonemeTokens(text, phonemizer, goruutLang, goruutNormalize)
 	if err != nil {
 		return nil, err
 	}
-
-	phonemeTokens := basicEnglishTokenize(phonemes)
-	textTokens := basicEnglishTokenize(text)
-	mergedTokens := mergePhonemesWithPunct(textTokens, phonemeTokens)
 	phonemeText := strings.Join(mergedTokens, " ")
 	ids := cleaner.Encode(phonemeText)
 	ids = append([]int64{0}, ids...)
@@ -234,44 +235,57 @@ func resolveVoiceID(cfg Config, voice string) (string, bool) {
 	return voice, false
 }
 
-func limitStrings(values []string, max int) []string {
-	if len(values) <= max {
-		return values
+func buildPhonemeTokens(text string, phonemizer *lib.Phonemizer, goruutLang string, goruutNormalize bool) ([]string, error) {
+	resp := phonemizer.Sentence(requests.PhonemizeSentence{
+		Sentence:  text,
+		Language:  goruutLang,
+		IsReverse: false,
+	})
+	if len(resp.Words) == 0 {
+		return nil, errors.New("goruut returned no words")
 	}
-	return append(values[:max], "...")
+	var tokens []string
+	for _, w := range resp.Words {
+		appendTokens(&tokens, w.PrePunct)
+		phonetic := w.Phonetic
+		if goruutNormalize {
+			phonetic = normalizeGoruutIPA(phonetic)
+		}
+		appendTokens(&tokens, phonetic)
+		appendTokens(&tokens, w.PostPunct)
+	}
+	return tokens, nil
 }
 
-func mergePhonemesWithPunct(textTokens []string, phonemeTokens []string) []string {
-	merged := make([]string, 0, len(textTokens))
-	idx := 0
-	for _, tok := range textTokens {
-		if isWordToken(tok) {
-			if idx < len(phonemeTokens) {
-				merged = append(merged, phonemeTokens[idx])
-				idx++
-				continue
-			}
-		}
-		merged = append(merged, tok)
-	}
-	// Append any remaining phoneme tokens if text ended without them.
-	for idx < len(phonemeTokens) {
-		merged = append(merged, phonemeTokens[idx])
-		idx++
-	}
-	return merged
+func normalizeGoruutIPA(text string) string {
+	// Minimal normalization to better align with espeak-ng IPA.
+	text = strings.ReplaceAll(text, "ɜɹ", "ɜː")
+	text = strings.ReplaceAll(text, "g", "ɡ")
+	return text
 }
 
-func isWordToken(tok string) bool {
-	if tok == "" {
-		return false
+func normalizeGoruutLang(lang string) string {
+	trimmed := strings.TrimSpace(lang)
+	if trimmed == "" {
+		return trimmed
 	}
-	for _, r := range tok {
-		if !(r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.IsMark(r)) {
-			return false
+	if strings.Contains(trimmed, "/") {
+		return dicts.LangName(trimmed)
+	}
+	return trimmed
+}
+
+func appendTokens(dst *[]string, text string) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return
+	}
+	for _, tok := range basicEnglishTokenize(text) {
+		if tok == "" {
+			continue
 		}
+		*dst = append(*dst, tok)
 	}
-	return true
 }
 
 func sortedKeys(m map[string]string) []string {

@@ -1,10 +1,6 @@
 package main
 
 import (
-	"bytes"
-	"errors"
-	"fmt"
-	"os/exec"
 	"regexp"
 	"strings"
 	"unicode"
@@ -93,31 +89,6 @@ func chunkText(text string, maxLen int) []string {
 		return []string{""}
 	}
 	return chunks
-}
-
-func phonemize(text string, espeakPath string, ipaMode string) (string, error) {
-	path := strings.TrimSpace(espeakPath)
-	if path == "" {
-		path = "espeak-ng"
-	}
-	mode := strings.TrimSpace(ipaMode)
-	if mode == "" {
-		mode = "ipa"
-	}
-	cmd := exec.Command(path, "-q", "--"+mode, "-v", "en-us", text)
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("espeak-ng failed: %w: %s", err, strings.TrimSpace(stderr.String()))
-	}
-	out := strings.TrimSpace(stdout.String())
-	if out == "" {
-		return "", errors.New("espeak-ng returned empty phonemes")
-	}
-	out = regexp.MustCompile(`\s+`).ReplaceAllString(out, " ")
-	return strings.TrimSpace(out), nil
 }
 
 func basicEnglishTokenize(text string) []string {
