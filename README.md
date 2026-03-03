@@ -1,5 +1,8 @@
 # Go demo (KittenTTS)
 
+> [!warning]
+> This is a vibe-coded demo for experimentation and learning. Do not use it in production.
+
 This demo runs the KittenTTS ONNX model from Go using ONNX Runtime and the
 Goruut phonemizer.
 
@@ -70,3 +73,5 @@ go run . \
   phonemization.
 - `--goruut-normalize` applies a minimal IPA normalization to better match the
   expected symbol set.
+- Goruut should probably be replaced with something much smaller (it adds 600MB
+  to the binary).
